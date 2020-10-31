@@ -18,9 +18,10 @@ import (
 
 type Options struct {
 	// required
-	Endpoint string
-	NoSSL    bool
-	Bucket   string
+	Endpoint     string
+	NoSSL        bool
+	Bucket       string
+	S3Accelerate bool
 
 	// minio auth (required)
 	AccessKeyID     string
@@ -80,6 +81,9 @@ func New(o Options) (http.Handler, error) {
 	})
 	if err != nil {
 		return nil, err
+	}
+	if o.S3Accelerate {
+		client.SetS3TransferAccelerate("s3-accelerate.amazonaws.com")
 	}
 
 	s := &server{
