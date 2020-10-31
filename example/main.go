@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"os"
 
+	"github.com/akrylysov/algnhsa"
 	"github.com/metalogical/BigFiles/auth"
 	"github.com/metalogical/BigFiles/server"
 )
@@ -32,4 +33,7 @@ func main() {
 	if err := http.ListenAndServe("127.0.0.1:5000", s); err != nil {
 		log.Fatalln(err)
 	}
+
+	// or try running the server on AWS Lambda
+	algnhsa.ListenAndServe(s, nil)
 }
