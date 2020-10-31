@@ -4,6 +4,7 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"strings"
 
 	"github.com/akrylysov/algnhsa"
 	"github.com/metalogical/BigFiles/auth"
@@ -22,6 +23,7 @@ func main() {
 	}
 
 	s, err := server.New(server.Options{
+		S3Accelerate: true,
 		Bucket:       bucket,
 		IsAuthorized: auth.Static(user, pass),
 	})
@@ -29,11 +31,12 @@ func main() {
 		log.Fatalln(err)
 	}
 
-	log.Println("serving on http://localhost:5000")
-	if err := http.ListenAndServe("127.0.0.1:5000", s); err != nil {
-		log.Fatalln(err)
+	if strings.HasPrefix(os.Getenv("AWS_EXECUTION_ENV"), "AWS_Lambda_") {
+		algnhsa.ListenAndServe(s, nil)
+	} else {
+		log.Println("serving on http://127.0.0.1:5000 ...")
+		if err := http.ListenAndServe("127.0.0.1:5000", s); err != nil {
+			log.Fatalln(err)
+		}
 	}
-
-	// or try running the server on AWS Lambda
-	algnhsa.ListenAndServe(s, nil)
 }
