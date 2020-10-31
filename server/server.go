@@ -183,8 +183,9 @@ func (s *server) handleBatch(w http.ResponseWriter, r *http.Request) {
 			}
 
 		case "upload":
-			_, err := s.client.StatObject(r.Context(), s.bucket, s.key(in.OID), minio.StatObjectOptions{})
+			info, err := s.client.StatObject(r.Context(), s.bucket, s.key(in.OID), minio.StatObjectOptions{})
 			if err == nil {
+				out.Size = int(info.Size)
 				// already exists, omit actions
 				continue
 			}
