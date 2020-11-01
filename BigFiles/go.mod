@@ -1,4 +1,4 @@
-module github.com/metalogical/BigFiles/example
+module github.com/metalogical/BigFiles/BigFiles
 
 go 1.15
 
