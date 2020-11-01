@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"math"
 	"net/http"
 	"net/url"
 	"os"
@@ -15,6 +16,8 @@ import (
 	"github.com/minio/minio-go/v7/pkg/credentials"
 	"github.com/minio/minio-go/v7/pkg/s3utils"
 )
+
+var S3PutLimit int = 5*int(math.Pow10(9)) - 1 // 5GB - 1
 
 type Options struct {
 	// required
@@ -187,6 +190,14 @@ func (s *server) handleBatch(w http.ResponseWriter, r *http.Request) {
 			}
 
 		case "upload":
+			if out.Size > S3PutLimit {
+				out.Error = &batch.ObjectError{
+					Code:    422,
+					Message: "cannot upload objects larger than 5GB to S3 via LFS basic transfer adapter",
+				}
+				continue
+			}
+
 			info, err := s.client.StatObject(r.Context(), s.bucket, s.key(in.OID), minio.StatObjectOptions{})
 			if err == nil {
 				out.Size = int(info.Size)
