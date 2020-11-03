@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"regexp"
 	"time"
 
 	"github.com/go-chi/chi"
@@ -18,6 +19,7 @@ import (
 )
 
 var S3PutLimit int = 5*int(math.Pow10(9)) - 1 // 5GB - 1
+var oidRegexp = regexp.MustCompile("^[a-f0-9]{64}$")
 
 type Options struct {
 	// required
@@ -161,27 +163,34 @@ func (s *server) handleBatch(w http.ResponseWriter, r *http.Request) {
 		})
 		out := &resp.Objects[len(resp.Objects)-1]
 
+		if !oidRegexp.MatchString(in.OID) {
+			out.Error = &batch.ObjectError{
+				Code:    422,
+				Message: "oid must be a SHA-256 hash in lower case hexadecimal",
+			}
+			continue
+		}
+
 		switch req.Operation {
 		case "download":
-			info, err := s.client.StatObject(r.Context(), s.bucket, s.key(in.OID), minio.StatObjectOptions{})
-			if err != nil {
+			if info, err := s.client.StatObject(r.Context(), s.bucket, s.key(in.OID), minio.StatObjectOptions{}); err != nil {
 				out.Error = &batch.ObjectError{
 					Code:    404,
 					Message: err.Error(),
 				}
 				continue
+			} else if in.Size != int(info.Size) {
+				out.Error = &batch.ObjectError{
+					Code:    422,
+					Message: "found object with wrong size",
+				}
 			}
 
 			href, err := s.client.PresignedGetObject(r.Context(), s.bucket, s.key(in.OID), s.ttl, nil)
 			if err != nil {
-				out.Error = &batch.ObjectError{
-					Code:    404,
-					Message: err.Error(),
-				}
-				continue
+				panic(err)
 			}
 
-			out.Size = int(info.Size)
 			out.Actions = &batch.Actions{
 				Download: &batch.Action{
 					HRef:      href.String(),
@@ -190,6 +199,17 @@ func (s *server) handleBatch(w http.ResponseWriter, r *http.Request) {
 			}
 
 		case "upload":
+			if info, err := s.client.StatObject(r.Context(), s.bucket, s.key(in.OID), minio.StatObjectOptions{}); err == nil {
+				if in.Size != int(info.Size) {
+					out.Error = &batch.ObjectError{
+						Code:    422,
+						Message: "existing object with wrong size",
+					}
+				}
+				// already exists, omit actions
+				continue
+			}
+
 			if out.Size > S3PutLimit {
 				out.Error = &batch.ObjectError{
 					Code:    422,
@@ -198,20 +218,9 @@ func (s *server) handleBatch(w http.ResponseWriter, r *http.Request) {
 				continue
 			}
 
-			info, err := s.client.StatObject(r.Context(), s.bucket, s.key(in.OID), minio.StatObjectOptions{})
-			if err == nil {
-				out.Size = int(info.Size)
-				// already exists, omit actions
-				continue
-			}
-
 			href, err := s.client.PresignedPutObject(r.Context(), s.bucket, s.key(in.OID), s.ttl)
 			if err != nil {
-				out.Error = &batch.ObjectError{
-					Code:    404,
-					Message: err.Error(),
-				}
-				continue
+				panic(err)
 			}
 
 			out.Actions = &batch.Actions{
